@@ -1,0 +1,576 @@
+import React, { useContext, useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from "react-native";
+import { CartContext } from "../contexts/CartContext";
+
+import { db, auth } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { createOrder } from "../services/orders";
+
+import { getAddresses, addPaymentMethod } from "../services/userData";
+
+const CheckoutScreen = ({ navigation }) => {
+  const { cartItems, totalPrice, clearCart } = useContext(CartContext);
+
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [cardholderName, setCardholderName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [province, setProvince] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+
+  const [saveCard, setSaveCard] = useState(false);
+
+  const tax = totalPrice * 0.08;
+  const grandTotal = totalPrice + tax; // shipping = free
+
+  const [askedShipping, setAskedShipping] = useState(false);
+
+  // to fill shipping info
+  const fillShippingFromSaved = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      Alert.alert("Not logged in", "Please log in again.");
+      return;
+    }
+
+    // 1) Profile (users/{uid})
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    const data = snap.exists() ? snap.data() : null;
+
+    // email
+    if (!email.trim()) setEmail((data?.email || user.email || "").trim());
+
+    // name from fullName
+    const full = (data?.fullName || "").trim();
+    if (full && (!firstName.trim() || !lastName.trim())) {
+      const parts = full.split(" ").filter(Boolean);
+      if (!firstName.trim()) setFirstName(parts[0] || "");
+      if (!lastName.trim()) setLastName(parts.slice(1).join(" ") || "");
+    }
+
+    // phone
+    if (!phone.trim() && data?.phone) setPhone(formatPhone(String(data.phone)));
+
+    // 2) Saved address (users/{uid}/addresses)
+    const list = await getAddresses(user.uid);
+    if (Array.isArray(list) && list.length > 0) {
+      const a = list[0];
+
+      if (!address.trim() && a.address) setAddress(a.address);
+      if (!city.trim() && a.city) setCity(a.city);
+      if (!province.trim() && a.state) setProvince(a.state);
+      if (!postalCode.trim() && a.zip) setPostalCode(formatPostalCode(a.zip));
+      if (!phone.trim() && a.phone) setPhone(formatPhone(String(a.phone)));
+
+      if ((!firstName.trim() || !lastName.trim()) && a.fullName) {
+        const parts = String(a.fullName).trim().split(" ").filter(Boolean);
+        if (!firstName.trim()) setFirstName(parts[0] || "");
+        if (!lastName.trim()) setLastName(parts.slice(1).join(" ") || "");
+      }
+    }
+  };
+
+  // ask if user wanna fill info
+  const askUseSavedShipping = () => {
+    if (askedShipping) return;
+
+    Alert.alert(
+      "Use saved shipping info?",
+      "Do you want to fill shipping information from your saved profile/address?",
+      [
+        {
+          text: "No",
+          style: "cancel",
+          onPress: () => setAskedShipping(true),
+        },
+        {
+          text: "Yes",
+          onPress: async () => {
+            setAskedShipping(true);
+            await fillShippingFromSaved();
+          },
+        },
+      ]
+    );
+  };
+
+
+  // Format postal code
+  const formatPostalCode = (text) => {
+    const cleaned = text
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 6);
+
+    if (cleaned.length <= 3) return cleaned;
+    return cleaned.slice(0, 3) + " " + cleaned.slice(3);
+  };
+
+  // format Phone number
+  const formatPhone = (text) => {
+    const cleaned = text.replace(/\D/g, "").slice(0, 10);
+
+    if (cleaned.length < 4) return cleaned;
+
+    if (cleaned.length < 7) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+    }
+
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+  };
+
+  // format card number
+  const formatCardNumber = (text) => {
+    const cleaned = text.replace(/\D/g, "").slice(0, 16);
+
+    const groups = cleaned.match(/.{1,4}/g);
+    return groups ? groups.join(" ") : cleaned;
+  };
+
+  // Place order
+  const handlePlaceOrder = async () => {
+    if (cartItems.length === 0) {
+        Alert.alert("Cart is empty", "Please add some products first.");
+        return;
+    }
+
+    // ✅ Shipping constraints
+    if (
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !email.trim() ||
+      !phone.trim() ||
+      !address.trim() ||
+      !city.trim() ||
+      !province.trim() ||
+      !postalCode.trim()
+    ) {
+      Alert.alert("Missing Information", "Please fill in all shipping fields.");
+      return;
+    }
+
+    // email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    // phone digits (basic 10-digit check)
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (phoneDigits.length !== 10) {
+      Alert.alert("Invalid Phone", "Phone number must be 10 digits.");
+      return;
+    }
+
+    // Canadian postal code (A1A 1A1)
+    const postalRegex = /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/;
+    if (!postalRegex.test(postalCode.trim())) {
+      Alert.alert("Invalid Postal Code", "Example: N6A 3K7");
+      return;
+    }
+
+    // ✅ Payment required constraints
+    const cardDigits = cardNumber.replace(/\D/g, "");
+    if (!/^\d{16}$/.test(cardDigits)) {
+      Alert.alert("Invalid Card Number", "Card number must be 16 digits.");
+      return;
+    }
+
+    if (!cardholderName.trim()) {
+      Alert.alert("Missing Name", "Please enter cardholder name.");
+      return;
+    }
+
+    // 🔹 Validate expiry date: MM/YY
+    const expiryRegex = /^(0[1-9]|1[0-2])\/\d{2}$/;
+    if (!expiryRegex.test(expiryDate)) {
+        Alert.alert(
+        "Invalid expiry date",
+        "Please enter expiry date in MM/YY format (e.g. 04/27)."
+        );
+        return;
+    }
+
+    // 🔹 Validate CVV
+    const cvvRegex = /^\d{3}$/;
+    if (!cvvRegex.test(cvv)) {
+        Alert.alert("Invalid CVV", "CVV must be exactly 3 digits.");
+        return;
+    }
+
+    // get current user from firebase
+    const user = auth.currentUser;
+    if (!user) {
+        Alert.alert("Not logged in", "Please log in again.");
+        return;
+    }
+
+    try {
+        const orderId = await createOrder({
+        userId: user.uid,
+        items: cartItems,
+        subtotal: totalPrice,
+        tax,
+        total: grandTotal,
+        });
+
+        if (saveCard) {
+          const digits = cardNumber.replace(/\D/g, "");
+          const last4 = digits.slice(-4);
+
+          if (last4.length === 4) {
+            await addPaymentMethod(user.uid, {
+              cardHolder: cardholderName,
+              expiry: expiryDate,
+              last4,
+            });
+          }
+        }
+
+        Alert.alert("Order placed!", `Your order #${orderId} has been placed.`, [
+        {
+            text: "OK",
+            onPress: () => {
+            clearCart();
+            navigation.getParent()?.navigate("Home");
+            },
+        },
+        ]);
+    } catch (error) {
+        console.log("Error creating order:", error);
+        Alert.alert("Error", "Could not place order. Please try again.");
+    }
+  };
+  
+
+  const handleExpiryChange = (text) => {
+    // only number
+    let cleaned = text.replace(/[^0-9]/g, "");
+
+    // 4 digits limit: MMYY
+    if (cleaned.length > 4) {
+        cleaned = cleaned.slice(0, 4);
+    }
+
+    // if >= 3 number add / after 2 first digits
+    if (cleaned.length >= 3) {
+        cleaned = cleaned.slice(0, 2) + "/" + cleaned.slice(2);
+    }
+
+    setExpiryDate(cleaned);
+  };
+
+  return (
+    <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 80}
+    >
+    <ScrollView style={styles.container} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Order summary */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Order Summary</Text>
+
+        {cartItems.length > 0 ? (
+          <>
+            {/* List Items */}
+            {cartItems.map((item) => (
+              <View style={styles.summaryRow} key={item.id}>
+                <Text style={styles.itemLine}>
+                  {item.name} x {item.quantity}
+                </Text>
+                <Text style={styles.itemAmount}>
+                  ${ (item.price * item.quantity).toFixed(2) }
+                </Text>
+              </View>
+            ))}
+
+            {/* Subtotal / Tax / Shipping / Total */}
+            <View style={styles.divider} />
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Subtotal</Text>
+              <Text style={styles.summaryValue}>
+                ${totalPrice.toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Tax (8%)</Text>
+              <Text style={styles.summaryValue}>${tax.toFixed(2)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Shipping</Text>
+              <Text style={styles.summaryValue}>Free</Text>
+            </View>
+
+            <View style={styles.summaryRowTotal}>
+              <Text style={styles.summaryTotalLabel}>Total</Text>
+              <Text style={styles.summaryTotalValue}>
+                ${grandTotal.toFixed(2)}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.itemLine}>No items in cart.</Text>
+        )}
+      </View>
+
+       {/* Shipping info */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Shipping Information</Text>
+
+        <View style={styles.row}>
+          <View style={styles.halfInputWrapper}>
+            <Text style={styles.label}>First Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter first name"
+              returnKeyType="next"
+              value={firstName}
+              onChangeText={setFirstName}
+              onFocus={askUseSavedShipping}
+            />
+          </View>
+          <View style={[styles.halfInputWrapper, { marginRight: 0 }]}>
+            <Text style={styles.label}>Last Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter last name"
+              returnKeyType="next"
+              value={lastName}
+              onChangeText={setLastName}
+              onFocus={askUseSavedShipping}
+            />
+          </View>
+        </View>
+
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter email address"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+          onFocus={askUseSavedShipping}
+        />
+
+        <Text style={styles.label}>Phone Number</Text>
+        <TextInput
+          style={styles.input}
+          value={phone}
+          onChangeText={(t) => setPhone(formatPhone(t))}
+          placeholder="e.g. (519) 123-4567"
+          keyboardType="phone-pad"
+          maxLength={14} 
+          returnKeyType="next"
+        />
+
+        <Text style={styles.label}>Address</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter street address"
+          value={address}
+          onChangeText={setAddress}
+        />
+
+        <View style={styles.row}>
+          <View style={styles.halfInputWrapper}>
+            <Text style={styles.label}>City</Text>
+            <TextInput 
+              style={styles.input} 
+              placeholder="Enter city"
+              value={city}
+              onChangeText={setCity} 
+            />
+          </View>
+          <View style={[styles.halfInputWrapper, { marginRight: 0 }]}>
+            <Text style={styles.label}>Province</Text>
+            <TextInput 
+              style={styles.input} 
+              placeholder="Enter Province"
+              value={province}
+              onChangeText={setProvince} 
+            />
+          </View>
+        </View>
+
+        <Text style={styles.label}>Postal Code</Text>
+        <TextInput
+          style={styles.input}
+          value={postalCode}
+          onChangeText={(t) => setPostalCode(formatPostalCode(t))}
+          placeholder="e.g. N6A 3K7"
+          keyboardType="default"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={7}
+          returnKeyType="next"
+        />
+      </View>
+
+      {/* 🔹 Payment Information */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Payment Information</Text>
+
+        <Text style={styles.label}>Card Number</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="1234 5678 9012 3456"
+          keyboardType="number-pad"
+          value={cardNumber}
+          onChangeText={(t) => setCardNumber(formatCardNumber(t))}
+          maxLength={19} 
+          returnKeyType="next"
+        />
+
+        <View style={styles.row}>
+          <View style={styles.halfInputWrapper}>
+            <Text style={styles.label}>Expiry Date</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="MM/YY"
+              keyboardType="numeric"
+              maxLength={5}              
+              value={expiryDate}
+              onChangeText={handleExpiryChange}
+            />
+          </View>
+
+          <View style={[styles.halfInputWrapper, { marginRight: 0 }]}>
+            <Text style={styles.label}>CVV</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="123"
+              keyboardType="numeric"
+              maxLength={3} 
+              secureTextEntry
+              value={cvv}
+              onChangeText={setCvv}
+            />
+          </View>
+        </View>
+
+        <Text style={styles.label}>Cardholder Name</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter cardholder name"
+          value={cardholderName}
+          onChangeText={setCardholderName}
+        />
+
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
+          <TouchableOpacity
+            onPress={() => setSaveCard(!saveCard)}
+            style={{
+              width: 20,
+              height: 20,
+              borderWidth: 1,
+              borderColor: "#9CA3AF",
+              marginRight: 8,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            {saveCard && <Text>✓</Text>}
+          </TouchableOpacity>
+          <Text>Save this card</Text>
+        </View>
+
+      </View>
+
+
+      <TouchableOpacity style={styles.placeButton} onPress={handlePlaceOrder}>
+        <Text style={styles.placeButtonText}>
+          Place Order - ${grandTotal.toFixed(2)}
+        </Text>
+      </TouchableOpacity>
+    </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+export default CheckoutScreen;
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 12,
+    color: "#111827",
+  },
+  itemLine: { marginBottom: 8, color: "#111827" },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  summaryRowTotal: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  summaryLabel: { color: "#6B7280" },
+  summaryValue: { color: "#111827" },
+  summaryTotalLabel: { fontWeight: "700", fontSize: 16 },
+  summaryTotalValue: { fontWeight: "700", fontSize: 16, color: "#2563EB" },
+
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  halfInputWrapper: { flex: 1, marginRight: 8 },
+  label: {
+    fontSize: 12,
+    color: "#101111ff",
+    fontWeight: "600",
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  input: {
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+  placeButton: {
+    backgroundColor: "#2563EB",
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  placeButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+});
