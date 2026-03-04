@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -146,6 +147,11 @@ useEffect(() => {
   };
 
   return (
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{ paddingBottom: 110 }}
+      showsVerticalScrollIndicator={false}
+    >
     <View style={styles.container}>
       {/* Header gradient */}
       <LinearGradient
@@ -277,6 +283,7 @@ useEffect(() => {
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
     </View>
+    </ScrollView>
   );
 };
 

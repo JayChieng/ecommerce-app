@@ -441,6 +441,7 @@ const CheckoutScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Enter first name"
+                placeholderTextColor="#6B7280"
                 returnKeyType="next"
                 value={firstName}
                 onChangeText={setFirstName}
@@ -452,6 +453,7 @@ const CheckoutScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Enter last name"
+                placeholderTextColor="#6B7280"
                 returnKeyType="next"
                 value={lastName}
                 onChangeText={setLastName}
@@ -464,6 +466,7 @@ const CheckoutScreen = ({ navigation }) => {
           <TextInput
             style={styles.input}
             placeholder="Enter email address"
+            placeholderTextColor="#6B7280"
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
@@ -477,6 +480,7 @@ const CheckoutScreen = ({ navigation }) => {
             value={phone}
             onChangeText={(t) => setPhone(formatPhone(t))}
             placeholder="e.g. (519) 123-4567"
+            placeholderTextColor="#6B7280"
             keyboardType="phone-pad"
             maxLength={14}
             returnKeyType="next"
@@ -486,6 +490,7 @@ const CheckoutScreen = ({ navigation }) => {
           <TextInput
             style={styles.input}
             placeholder="Enter street address"
+            placeholderTextColor="#6B7280"
             value={address}
             onChangeText={setAddress}
           />
@@ -496,6 +501,7 @@ const CheckoutScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Enter city"
+                placeholderTextColor="#6B7280"
                 value={city}
                 onChangeText={setCity}
               />
@@ -505,6 +511,7 @@ const CheckoutScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Enter Province"
+                placeholderTextColor="#6B7280"
                 value={province}
                 onChangeText={setProvince}
               />
@@ -517,6 +524,7 @@ const CheckoutScreen = ({ navigation }) => {
             value={postalCode}
             onChangeText={(t) => setPostalCode(formatPostalCode(t))}
             placeholder="e.g. N6A 3K7"
+            placeholderTextColor="#6B7280"
             keyboardType="default"
             autoCapitalize="characters"
             autoCorrect={false}
@@ -535,6 +543,7 @@ const CheckoutScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="1234 5678 9012 3456"
+                placeholderTextColor="#6B7280"
                 keyboardType="number-pad"
                 value={
                   selectedCard?.last4 ? `•••• •••• •••• ${selectedCard.last4}` : cardNumber
@@ -561,6 +570,7 @@ const CheckoutScreen = ({ navigation }) => {
                   <input
                     style={styles.webInput}
                     placeholder="MM/YY"
+                    placeholderTextColor="#6B7280"
                     value={expiryDate}
                     onChange={(e) => handleExpiryChange(e.target.value)}
                     autoComplete="new-password"
@@ -575,7 +585,9 @@ const CheckoutScreen = ({ navigation }) => {
                   <input
                     style={styles.webInput}
                     placeholder="123"
+                    placeholderTextColor="#6B7280"
                     value={cvv}
+                    type="password"
                     onChange={(e) =>
                       setCvv(e.target.value.replace(/\D/g, "").slice(0, 3))
                     }
@@ -593,6 +605,7 @@ const CheckoutScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="1234 5678 9012 3456"
+                placeholderTextColor="#6B7280"
                 keyboardType="number-pad"
                 value={cardNumber}
                 onChangeText={(t) => {
@@ -616,6 +629,7 @@ const CheckoutScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.input}
                     placeholder="MM/YY"
+                    placeholderTextColor="#6B7280"
                     keyboardType="numeric"
                     maxLength={5}
                     value={expiryDate}
@@ -628,11 +642,13 @@ const CheckoutScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.input}
                     placeholder="123"
+                    placeholderTextColor="#6B7280"
                     keyboardType="numeric"
                     maxLength={3}
-                    secureTextEntry
+                    secureTextEntry={true}
                     value={cvv}
                     onChangeText={setCvv}
+                    
                   />
                 </View>
               </View>
@@ -643,6 +659,7 @@ const CheckoutScreen = ({ navigation }) => {
           <TextInput
             style={styles.input}
             placeholder="Enter cardholder name"
+            placeholderTextColor="#6B7280"
             value={cardholderName}
             onChangeText={setCardholderName}
           />

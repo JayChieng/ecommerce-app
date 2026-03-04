@@ -31,6 +31,18 @@ const createEmptyAddress = () => ({
   zip: "",
 });
 
+const formatPhone = (text) => {
+  const cleaned = text.replace(/\D/g, "").slice(0, 10);
+
+  if (cleaned.length < 4) return cleaned;
+
+  if (cleaned.length < 7) {
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+  }
+
+  return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+};
+
 const AddressScreen = () => {
   // example model
   const [addresses, setAddresses] = useState([]);
@@ -113,34 +125,93 @@ const AddressScreen = () => {
 
   // save or update
   const handleSaveAddress = async () => {
-  const user = auth.currentUser;
-  if (!user) {
-    Alert.alert("Not logged in", "Please login again.");
-    return;
-  }
-
-  if (!form.fullName?.trim() || !form.address?.trim()) {
-    Alert.alert("Missing info", "Full Name and Address are required.");
-    return;
-  }
-
-  try {
-    const { id, ...payload } = form;
-
-    if (isNew) {
-      await addAddress(user.uid, payload);
-    } else {
-      await updateAddress(user.uid, form.id, payload);
+    const user = auth.currentUser;
+    if (!user) {
+      if (Platform.OS === "web") window.alert("Not logged in. Please login again.");
+      else Alert.alert("Not logged in", "Please login again.");
+      return;
     }
 
-    const list = await getAddresses(user.uid);
-    setAddresses(list);
-    setModalVisible(false);
-  } catch (e) {
-    console.log("Save address error:", e);
-    Alert.alert("Error", e?.message || "Could not save address.");
-  }
-};
+    // helpers  
+    const showMsg = (title, msg) => {
+      if (Platform.OS === "web") window.alert(`${title}\n\n${msg}`);
+      else Alert.alert(title, msg);
+    };
+
+    const cleanPhone = (t) => (t || "").replace(/\D/g, "").slice(0, 10);
+
+    const formatPhone = (t) => {
+      const d = cleanPhone(t);
+      if (d.length < 4) return d;
+      if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+      return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+    };
+
+    const formatPostal = (t) => {
+      const cleaned = (t || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, 6);
+      if (cleaned.length <= 3) return cleaned;
+      return cleaned.slice(0, 3) + " " + cleaned.slice(3);
+    };
+
+    //  normalize 
+    const fullName = (form.fullName || "").trim();
+    const address = (form.address || "").trim();
+    const city = (form.city || "").trim();
+    const province = (form.state || "").trim();
+    const phone = formatPhone(form.phone || "");
+    const zip = formatPostal(form.zip || "");
+
+    //  validate required 
+    if (!fullName) return showMsg("Missing info", "Full Name is required.");
+    if (!phone) return showMsg("Missing info", "Phone Number is required.");
+    if (!address) return showMsg("Missing info", "Address is required.");
+    if (!city) return showMsg("Missing info", "City is required.");
+    if (!province) return showMsg("Missing info", "Province is required.");
+    if (!zip) return showMsg("Missing info", "Postal Code is required.");
+
+    // validate formats 
+    if (cleanPhone(phone).length !== 10) {
+      return showMsg("Invalid Phone", "Phone number must be 10 digits (e.g. 5191234567).");
+    }
+
+    const postalRegex = /^[A-Za-z]\d[A-Za-z][ ]?\d[A-Za-z]\d$/;
+    if (!postalRegex.test(zip)) {
+      return showMsg("Invalid Postal Code", "Example: N6A 3K7");
+    }
+
+    // (optional) province code 2 letters (ON, BC...) 
+    // const provRegex = /^[A-Z]{2}$/;
+    // if (!provRegex.test(province.toUpperCase())) {
+    //   return showMsg("Invalid Province", "Use 2-letter code like ON, BC, AB...");
+    // }
+
+    try {
+      const { id, ...payload } = form;
+
+      payload.fullName = fullName;
+      payload.phone = phone;
+      payload.address = address;
+      payload.city = city;
+      payload.state = province.toUpperCase();
+      payload.zip = zip;
+
+      if (isNew) {
+        await addAddress(user.uid, payload);
+      } else {
+        await updateAddress(user.uid, id, payload);
+      }
+
+      const list = await getAddresses(user.uid);
+      setAddresses(list);
+      setModalVisible(false);
+    } catch (e) {
+      console.log("Save address error:", e);
+      showMsg("Error", e?.message || "Could not save address.");
+    }
+  };
 
   const renderAddressCard = ({ item }) => (
     <View style={styles.card}>
@@ -217,8 +288,10 @@ const AddressScreen = () => {
             <TextInput
               style={styles.input}
               value={form.phone}
-              onChangeText={(text) => setForm({ ...form, phone: text })}
-              placeholder="Phone number"
+              onChangeText={(text) =>
+                setForm({ ...form, phone: formatPhone(text) })
+              }
+              placeholder="e.g. 5191234567"
               keyboardType="phone-pad"
             />
 
@@ -251,16 +324,15 @@ const AddressScreen = () => {
               </View>
             </View>
 
-            <Text style={styles.label}>ZIP Code *</Text>
+            <Text style={styles.label}>Postal Code *</Text>
             <TextInput
               style={styles.input}
               value={form.zip}
-              onChangeText={(text) =>
-                setForm({
-                  ...form,
-                  zip: text.toUpperCase().replace(/[^A-Z0-9 ]/g, ""),
-                })
-              }
+              onChangeText={(text) => {
+                const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+                const formatted = cleaned.length <= 3 ? cleaned : cleaned.slice(0, 3) + " " + cleaned.slice(3);
+                setForm({ ...form, zip: formatted });
+              }}
               placeholder="e.g. N6A 3K7"
               keyboardType="default"
               autoCapitalize="characters"
