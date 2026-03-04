@@ -16,6 +16,7 @@ import { getOrdersForUser } from "../services/orders";
 import { pickAndUploadAvatar } from "../services/avatars";
 import { listenWishlistCount } from "../services/userData";
 
+import { Platform } from "react-native";
 
 const ProfileScreen = ({ navigation }) => {
   const user = auth.currentUser;
@@ -109,15 +110,23 @@ useEffect(() => {
   }, [user?.uid]);
 
 
-  const handleLogout = () => {
-  Alert.alert(
-    "Sign Out",
-    "Are you sure you want to sign out?",
-    [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
+  const handleLogout = async () => {
+    // Web
+    if (Platform.OS === "web") {
+      const ok = window.confirm("Are you sure you want to sign out?");
+      if (!ok) return;
+
+      try {
+        await auth.signOut();
+      } catch (e) {
+        window.alert("Failed to sign out");
+      }
+      return;
+    }
+
+    // mobile
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
       {
         text: "Sign Out",
         style: "destructive",
@@ -129,9 +138,8 @@ useEffect(() => {
           }
         },
       },
-    ]
-  );
-};
+    ]);
+  };
 
   const comingSoon = (title) => {
     Alert.alert("Coming soon", `${title} screen coming soon!`);

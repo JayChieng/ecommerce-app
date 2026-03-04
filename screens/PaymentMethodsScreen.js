@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -97,7 +98,30 @@ const PaymentMethodsScreen = () => {
   };
 
   // Delete card
-  const handleDeletePress = (id) => {
+  const handleDeletePress = async (id) => {
+    // WEB
+    if (Platform.OS === "web") {
+      const ok = window.confirm("Are you sure you want to delete this card?");
+      if (!ok) return;
+
+      const user = auth.currentUser;
+      if (!user) {
+        window.alert("Not logged in. Please login again.");
+        return;
+      }
+
+      try {
+        await deletePaymentMethod(user.uid, id);
+        const list = await getPaymentMethods(user.uid);
+        setCards(list);
+      } catch (e) {
+        console.log("Delete card error:", e);
+        window.alert(e?.message || "Failed to delete card");
+      }
+      return;
+    }
+
+    // MOBILE
     Alert.alert("Delete Card", "Are you sure you want to delete this card?", [
       { text: "Cancel", style: "cancel" },
       {

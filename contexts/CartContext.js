@@ -1,4 +1,6 @@
-import React, { createContext, useReducer, useMemo } from "react";
+import React, { createContext, useReducer, useMemo, useEffect  } from "react";
+import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const CartContext = createContext();
 
@@ -7,11 +9,16 @@ const CART_ACTIONS = {
   REMOVE_ITEM: "REMOVE_ITEM",
   UPDATE_QUANTITY: "UPDATE_QUANTITY",
   CLEAR_CART: "CLEAR_CART",
+  SET_CART: "SET_CART",
 };
 
 // state = array item: { id, name, price, imageUrl, quantity }
 const cartReducer = (state, action) => {
   switch (action.type) {
+    case CART_ACTIONS.SET_CART: {
+      return Array.isArray(action.payload) ? action.payload : [];
+    }
+
     case CART_ACTIONS.ADD_ITEM: {
       const { product, quantity } = action.payload;
       const existing = state.find((item) => item.id === product.id);
@@ -60,8 +67,51 @@ const cartReducer = (state, action) => {
   }
 };
 
+const STORAGE_KEY = "cart_items_v1";
+// read storage
+const readCartStorage = async () => {
+  try {
+    if (Platform.OS === "web") {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    }
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.log("readCartStorage error:", e);
+    return [];
+  }
+};
+
+// write storage
+const writeCartStorage = async (cartItems) => {
+  try {
+    const raw = JSON.stringify(cartItems);
+    if (Platform.OS === "web") {
+      window.localStorage.setItem(STORAGE_KEY, raw);
+      return;
+    }
+    await AsyncStorage.setItem(STORAGE_KEY, raw);
+  } catch (e) {
+    console.log("writeCartStorage error:", e);
+  }
+};
+
 export const CartProvider = ({ children }) => {
   const [cartItems, dispatch] = useReducer(cartReducer, []);
+
+  // Load cart once when app starts
+  useEffect(() => {
+    (async () => {
+      const saved = await readCartStorage();
+      dispatch({ type: CART_ACTIONS.SET_CART, payload: saved });
+    })();
+  }, []);
+
+  // Save cart whenever it changes
+  useEffect(() => {
+    writeCartStorage(cartItems);
+  }, [cartItems]);
 
   // helper functions
   const addToCart = (product, quantity = 1) => {
