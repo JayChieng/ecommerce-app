@@ -198,6 +198,7 @@ const MainTabs = () => {
 
 export default function App() {
   const [fontsLoaded] = useFonts({
+    ...Ionicons.font,
     ...MaterialIcons.font,
   });
   const [user, setUser] = useState(null);
