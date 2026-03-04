@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +20,7 @@ import {
   deleteAddress,
 } from "../services/userData";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 const createEmptyAddress = () => ({
   fullName: "",
@@ -65,24 +67,48 @@ const AddressScreen = () => {
   };
 
   // delete
-  const handleDeletePress = (id) => {
-  Alert.alert("Delete Address", "Are you sure you want to delete this?", [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Delete",
-      style: "destructive",
-      onPress: async () => {
-        const user = auth.currentUser;
-        if (!user) return;
+  const handleDeletePress = async (id) => {
+      // WEB
+    if (Platform.OS === "web") {
+      const ok = window.confirm("Are you sure you want to delete this address?");
+      if (!ok) return;
 
+      const user = auth.currentUser;
+      if (!user) {
+        window.alert("Session lost. Please login again.");
+        return;
+      }
+
+      try {
         await deleteAddress(user.uid, id);
 
         const list = await getAddresses(user.uid);
         setAddresses(list);
+      } catch (e) {
+        console.log("Delete address error:", e);
+        window.alert(e?.message || "Failed to delete address");
+      }
+      return;
+    }
+
+    // MOBILE
+    Alert.alert("Delete Address", "Are you sure you want to delete this?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const user = auth.currentUser;
+          if (!user) return;
+
+          await deleteAddress(user.uid, id);
+
+          const list = await getAddresses(user.uid);
+          setAddresses(list);
+        },
       },
-    },
-  ]);
-};
+    ]);
+  };
 
 
   // save or update

@@ -35,6 +35,10 @@ import {
 
 import { Platform } from "react-native";
 
+if (Platform.OS === "web") {
+  require("./app.web.css");
+}
+
 
 
 const RootStack = createNativeStackNavigator();
@@ -159,7 +163,19 @@ const MainTabs = () => {
         },
         tabBarActiveTintColor: "#2563EB",
         tabBarInactiveTintColor: "#6B7280",
-        tabBarLabelStyle: { fontSize: 11 },
+        tabBarStyle: {
+          height: Platform.OS === "web" ? 60 : 60,
+        },
+
+        tabBarItemStyle: {
+          justifyContent: "center",
+          alignItems: "center",
+        },
+
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginBottom: Platform.OS === "web" ? 4 : 0,
+        },
       })}
     >
       <Tab.Screen name="Home" component={HomeStackNavigator} />
@@ -235,18 +251,32 @@ export default function App() {
 
   return (
     <CartProvider>
-      <NavigationContainer>
-        <RootStack.Navigator screenOptions={{ headerShown: false}}>
-          {user ? (
-            // if logined go to MainTabs
-            <RootStack.Screen name="Main" component={MainTabs} />
-          ) : (
-            // if not login go to Auth
-            <RootStack.Screen name="Auth" component={AuthStackNavigator} />
-          )}
-        </RootStack.Navigator>
-      </NavigationContainer>
+      {Platform.OS === "web" ? (
+        <div className="web-shell">
+          <div className="web-content">
+            <NavigationContainer>
+              <RootStack.Navigator screenOptions={{ headerShown: false }}>
+                {user ? (
+                  <RootStack.Screen name="Main" component={MainTabs} />
+                ) : (
+                  <RootStack.Screen name="Auth" component={AuthStackNavigator} />
+                )}
+              </RootStack.Navigator>
+            </NavigationContainer>
+          </div>
+        </div>
+      ) : (
+        <NavigationContainer>
+          <RootStack.Navigator screenOptions={{ headerShown: false }}>
+            {user ? (
+              <RootStack.Screen name="Main" component={MainTabs} />
+            ) : (
+              <RootStack.Screen name="Auth" component={AuthStackNavigator} />
+            )}
+          </RootStack.Navigator>
+        </NavigationContainer>
+      )}
     </CartProvider>
-    
   );
+
 }
