@@ -26,6 +26,8 @@ import NotificationsScreen from "./screens/NotificationsScreen";
 import { CartProvider, CartContext } from "./contexts/CartContext";
 
 import { Ionicons } from "@expo/vector-icons";
+import { useFonts } from 'expo-font';
+import { MaterialIcons } from '@expo/vector-icons';
 
 // import for notification
 import {
@@ -195,6 +197,9 @@ const MainTabs = () => {
 };
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    ...MaterialIcons.font,
+  });
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
 
@@ -248,6 +253,9 @@ export default function App() {
 
 
   if (checking) return null;
+  if (!fontsLoaded) {
+    return null;
+  }
 
   return (
     <CartProvider>
